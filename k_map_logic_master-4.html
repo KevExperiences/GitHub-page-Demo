@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K-Map Logic Master - Boolean Puzzle Game</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0b0f19;
+            color: #f1f5f9;
+            user-select: none;
+        }
+
+        .kmap-cell {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .kmap-cell:hover {
+            transform: scale(1.03);
+            z-index: 10;
+        }
+
+        .kmap-cell.selected {
+            outline: 2px solid #38bdf8;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+        }
+
+        /* Distinct transparent color themes for active term groups */
+        .group-color-0 { border-color: #ef4444; background-color: rgba(239, 68, 68, 0.25); color: #fca5a5; }
+        .group-color-1 { border-color: #3b82f6; background-color: rgba(59, 130, 246, 0.25); color: #93c5fd; }
+        .group-color-2 { border-color: #10b981; background-color: rgba(16, 185, 129, 0.25); color: #6ee7b7; }
+        .group-color-3 { border-color: #f59e0b; background-color: rgba(245, 158, 11, 0.25); color: #fde047; }
+        .group-color-4 { border-color: #8b5cf6; background-color: rgba(139, 92, 246, 0.25); color: #c4b5fd; }
+        .group-color-5 { border-color: #ec4899; background-color: rgba(236, 72, 153, 0.25); color: #fbcfe8; }
+        .group-color-6 { border-color: #14b8a6; background-color: rgba(20, 184, 166, 0.25); color: #99f6e4; }
+        .group-color-7 { border-color: #f97316; background-color: rgba(249, 115, 22, 0.25); color: #fdba74; }
+
+        .toast-enter {
+            animation: slideIn 0.25s ease-out forwards;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col font-sans antialiased text-slate-100 bg-slate-950">
+
+    <header class="bg-slate-900/95 border-b border-slate-800 shrink-0 z-50 px-3 py-1.5">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+            <h1 class="font-bold text-sm md:text-base tracking-tight text-white leading-none flex items-center gap-1.5">
+                <i class="fa-solid fa-microchip text-sky-400"></i>K-Map Logic Master
+            </h1>
+
+            <!-- Stats & Controls -->
+            <div class="flex items-center gap-2">
+                <div class="bg-slate-800/90 px-2 py-0.5 rounded-lg border border-slate-700 flex items-center gap-2 text-xs">
+                    <div class="text-center">
+                        <span class="text-[8px] uppercase text-slate-400 font-bold block leading-none">Level</span>
+                        <span id="stat-level" class="font-bold text-sky-400 font-mono leading-tight">1/10</span>
+                    </div>
+                    <div class="h-3 w-[1px] bg-slate-700"></div>
+                    <div class="text-center">
+                        <span class="text-[8px] uppercase text-slate-400 font-bold block leading-none">Score</span>
+                        <span id="stat-score" class="font-bold text-emerald-400 font-mono leading-tight">0</span>
+                    </div>
+                    <div class="h-3 w-[1px] bg-slate-700"></div>
+                    <div class="text-center">
+                        <span class="text-[8px] uppercase text-slate-400 font-bold block leading-none">Stars</span>
+                        <span id="stat-stars" class="font-bold text-amber-400 leading-tight">
+                            <i class="fa-solid fa-star text-[9px]"></i> <span id="star-count">0</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <button id="btn-sound" class="p-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 transition text-xs" title="Toggle Sound">
+                        <i id="sound-icon" class="fa-solid fa-volume-high"></i>
+                    </button>
+                    <button id="btn-tutorial" class="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs flex items-center gap-1 transition">
+                        <i class="fa-solid fa-circle-question text-[10px]"></i> Rules
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-2 md:p-3 grid grid-cols-1 lg:grid-cols-12 gap-2 md:gap-3 min-h-0 overflow-hidden">
+
+        <!-- Left Panel: Interactive K-Map Grid -->
+        <section class="lg:col-span-7 flex flex-col gap-2 h-full min-h-0 justify-between">
+            
+            <!-- Mode Switcher & Variable Selector Bar -->
+            <div class="bg-slate-900/90 rounded-xl p-1.5 border border-slate-800 flex items-center justify-between flex-wrap gap-2 shrink-0">
+                <div class="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                    <button id="mode-campaign" class="px-2 py-0.5 rounded text-xs font-semibold transition bg-indigo-600 text-white shadow">
+                        <i class="fa-solid fa-trophy mr-1"></i> Campaign
+                    </button>
+                    <button id="mode-sandbox" class="px-2 py-0.5 rounded text-xs font-semibold text-slate-400 hover:text-white transition">
+                        <i class="fa-solid fa-flask mr-1"></i> Sandbox
+                    </button>
+                </div>
+
+                <!-- Logic Mode Selector: SOP vs POS -->
+                <div class="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                    <button id="logic-sop" class="px-2 py-0.5 rounded text-xs font-semibold transition bg-sky-600 text-white shadow" title="Sum of Products (Group 1s)">
+                        SOP (Minterms)
+                    </button>
+                    <button id="logic-pos" class="px-2 py-0.5 rounded text-xs font-semibold text-slate-400 hover:text-white transition" title="Product of Sums (Group 0s)">
+                        POS (Maxterms)
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-1.5">
+                    <label for="var-count-select" class="text-xs text-slate-400 font-medium">Vars:</label>
+                    <select id="var-count-select" class="bg-slate-950 border border-slate-700 rounded-lg text-xs px-1.5 py-0.5 font-mono text-sky-300 focus:outline-none">
+                        <option value="2">2 (A, B)</option>
+                        <option value="3" selected>3 (A, B, C)</option>
+                        <option value="4">4 (A, B, C, D)</option>
+                    </select>
+                    <button id="btn-randomize" class="p-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs transition" title="Randomize Grid">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-2 shadow-xl flex-1 flex flex-col items-center justify-between min-h-0 overflow-hidden">
+                
+                <!-- Objective / Level Info -->
+                <div class="w-full flex items-center justify-between pb-1 border-b border-slate-800/80 shrink-0">
+                    <div class="min-w-0 pr-2">
+                        <span id="level-title" class="text-xs font-bold text-indigo-400 tracking-wide uppercase truncate block">Level 1: 2-Variable Grouping</span>
+                        <p id="level-desc" class="text-[10px] text-slate-400 leading-tight truncate">Group adjacent 1s in powers of 2 (1, 2, 4, 8, 16).</p>
+                    </div>
+                    <button id="btn-hint" class="px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs flex items-center gap-1 shrink-0">
+                        <i class="fa-solid fa-lightbulb text-[10px]"></i> Hint
+                    </button>
+                </div>
+
+                <!-- K-Map Dynamic Grid Wrapper -->
+                <div id="kmap-wrapper" class="my-auto flex flex-col items-center justify-center w-full min-h-0 py-1 overflow-hidden">
+                    <!-- Dynamic K-Map injected by JavaScript -->
+                </div>
+
+                <!-- Grid Legend & Helper -->
+                <div class="w-full flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80 shrink-0 text-[10px] text-slate-400">
+                    <div id="corner-helper" class="hidden items-center gap-1">
+                        <button id="btn-select-corners" class="px-1.5 py-0.5 bg-slate-800 hover:bg-sky-600 text-sky-300 hover:text-white rounded text-[10px] font-mono border border-slate-700 transition">
+                            <i class="fa-solid fa-border-all mr-1"></i>Select 4 Corners
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2.5 ml-auto text-[9px] md:text-[10px]">
+                        <div class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-sky-500/40 border border-sky-400 inline-block"></span>
+                            <span>Selected</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-slate-800 border border-slate-700 inline-block"></span>
+                            <span>0</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-slate-700 font-bold text-white flex items-center justify-center text-[7px] inline-block">1</span>
+                            <span>1</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="w-2 h-2 rounded bg-slate-800 text-amber-400 font-mono text-[7px] flex items-center justify-center border border-amber-500/30 inline-block">X</span>
+                            <span>Don't Care</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Panel: Controls, Choices, Expressions -->
+        <section class="lg:col-span-5 flex flex-col gap-2 h-full min-h-0 justify-between">
+            
+            <!-- Selection Status & Term Selector -->
+            <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-2.5 shadow-lg shrink-0">
+                <div class="flex items-center justify-between mb-1.5">
+                    <h2 class="text-xs font-bold text-white flex items-center gap-1">
+                        <i class="fa-solid fa-object-group text-sky-400"></i> Current Selection
+                    </h2>
+                    <span id="selection-count-badge" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700">
+                        0 cells
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-1.5 mb-1.5">
+                    <div class="bg-slate-950 p-1 rounded-lg border border-slate-800">
+                        <span class="text-[8px] text-slate-400 uppercase font-semibold block leading-none">Power of 2</span>
+                        <span id="status-power-2" class="text-xs font-medium text-slate-400 mt-0.5 flex items-center gap-1 truncate">
+                            <i class="fa-solid fa-minus text-slate-600"></i> None
+                        </span>
+                    </div>
+                    <div class="bg-slate-950 p-1 rounded-lg border border-slate-800">
+                        <span class="text-[8px] text-slate-400 uppercase font-semibold block leading-none">Box Shape</span>
+                        <span id="status-rectangular" class="text-xs font-medium text-slate-400 mt-0.5 flex items-center gap-1 truncate">
+                            <i class="fa-solid fa-minus text-slate-600"></i> None
+                        </span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-950 p-1.5 rounded-lg border border-slate-800 mb-1.5">
+                    <span id="term-type-label" class="text-[8px] text-slate-400 uppercase font-semibold block leading-none mb-1">Select Correct Product Term (Minterm)</span>
+                    <div id="selection-term-output" class="min-h-[36px] flex items-center justify-center">
+                        <span class="text-slate-600 text-xs font-normal italic">Select valid 1s on grid first</span>
+                    </div>
+                </div>
+
+                <button id="btn-clear-selection" class="w-full py-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-rotate-left text-[10px]"></i> Clear Selection
+                </button>
+            </div>
+
+            <!-- Active Groups & Solver Panel -->
+            <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-2.5 shadow-lg flex-1 flex flex-col justify-between min-h-0">
+                <div class="flex items-center justify-between mb-1 shrink-0">
+                    <h2 class="text-xs font-bold text-white flex items-center gap-1">
+                        <i class="fa-solid fa-layer-group text-indigo-400"></i> Active Groups (<span id="active-group-count">0</span>)
+                    </h2>
+                    <button id="btn-clear-all-groups" class="text-[10px] text-slate-400 hover:text-red-400 transition">
+                        Clear All
+                    </button>
+                </div>
+
+                <!-- Active Group Badges -->
+                <div id="active-groups-container" class="flex flex-wrap gap-1 p-1.5 rounded-lg bg-slate-950 border border-slate-800 items-start align-content-start overflow-y-auto flex-1 min-h-[40px] max-h-[90px]">
+                    <span class="text-[11px] text-slate-500 italic w-full text-center">No groups added yet.</span>
+                </div>
+
+                <div class="shrink-0 space-y-1.5 mt-1.5">
+                    <div class="bg-slate-950 p-2 rounded-lg border border-indigo-500/30">
+                        <div class="flex items-center justify-between mb-0.5">
+                            <span id="sop-pos-title" class="text-[8px] uppercase tracking-wider text-indigo-400 font-bold">Sum of Products (SOP)</span>
+                            <span id="coverage-badge" class="text-[8px] font-mono px-1 py-0.2 rounded bg-slate-800 text-slate-400">Coverage: 0%</span>
+                        </div>
+                        <div id="final-expression-output" class="text-sm md:text-base font-mono font-bold text-emerald-400 tracking-wide truncate">
+                            F = 0
+                        </div>
+                    </div>
+
+                    <button id="btn-submit-solution" class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-xs tracking-wide shadow-md transition transform active:scale-[0.99] flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-circle-check text-xs"></i> Verify & Check Logic
+                    </button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Rules Modal -->
+    <div id="tutorial-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-lg w-full flex flex-col shadow-2xl overflow-hidden p-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-graduation-cap text-sky-400"></i> Karnaugh Map Rules
+                </h3>
+                <button id="btn-close-tutorial" class="text-slate-400 hover:text-white p-0.5">
+                    <i class="fa-solid fa-xmark text-base"></i>
+                </button>
+            </div>
+
+            <div class="space-y-2 text-xs text-slate-300 mb-3">
+                <div class="bg-indigo-950/40 border border-indigo-500/30 p-2 rounded-lg">
+                    <strong class="text-indigo-300 block mb-0.5"><i class="fa-solid fa-bullseye mr-1"></i> Goal:</strong>
+                    Cover all <strong class="text-emerald-400">1</strong>s using the fewest and largest rectangular boxes possible.
+                </div>
+                
+                <ul class="space-y-1.5 text-[11px] list-disc list-inside text-slate-300">
+                    <li><strong class="text-white">Power of 2:</strong> Group sizes must be 1, 2, 4, 8, or 16 cells.</li>
+                    <li><strong class="text-white">Rectangles Only:</strong> Only filled 1x2, 2x2, 1x4, 4x4 boxes (no diagonals or L-shapes).</li>
+                    <li><strong class="text-white">SOP vs POS:</strong> Switch to SOP to group 1s (Sum of Products), or POS to group 0s (Product of Sums).</li>
+                    <li><strong class="text-white">Torus Grid (Wrap-Around):</strong> Top wraps to bottom; left wraps to right (including 4 corners).</li>
+                    <li><strong class="text-white">Multiple Choice:</strong> Select valid cells, then click the correct product/sum term option!</li>
+                    <li><strong class="text-white">Sandbox Mode:</strong> Right-click cells to edit value (0 &rarr; 1 &rarr; X).</li>
+                </ul>
+            </div>
+
+            <button id="btn-modal-gotit" class="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition">
+                Got it, Let's Play!
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="fixed bottom-3 right-3 z-50 flex flex-col gap-1.5 pointer-events-none"></div>
+
+    <script>
+        let audioCtx = null;
+        let soundMuted = false;
+
+        function playSound(type) {
+            if (soundMuted) return;
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'click') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.05);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                } else if (type === 'add') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.1);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+                    osc.start(now);
+                    osc.stop(now + 0.12);
+                } else if (type === 'remove') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(350, now);
+                    osc.frequency.exponentialRampToValueAtTime(200, now + 0.08);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'error') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(180, now);
+                    osc.frequency.setValueAtTime(120, now + 0.08);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.18);
+                    osc.start(now);
+                    osc.stop(now + 0.18);
+                } else if (type === 'win') {
+                    const notes = [523.25, 659.25, 783.99, 1046.50];
+                    notes.forEach((freq, idx) => {
+                        const noteOsc = audioCtx.createOscillator();
+                        const noteGain = audioCtx.createGain();
+                        noteOsc.connect(noteGain);
+                        noteGain.connect(audioCtx.destination);
+
+                        const startTime = now + (idx * 0.08);
+                        noteOsc.frequency.setValueAtTime(freq, startTime);
+                        noteGain.gain.setValueAtTime(0.2, startTime);
+                        noteGain.gain.linearRampToValueAtTime(0.01, startTime + 0.15);
+                        noteOsc.start(startTime);
+                        noteOsc.stop(startTime + 0.15);
+                    });
+                }
+            } catch (e) {
+                console.error("Audio error:", e);
+            }
+        }
+
+        const CAMPAIGN_LEVELS = [
+            {
+                numVars: 2,
+                title: "Level 1: Single Pair Grouping",
+                desc: "Group 2 adjacent 1s to form a single variable term.",
+                grid: [
+                    [1, 1],
+                    [0, 0]
+                ],
+                targetTerms: ["A'"]
+            },
+            {
+                numVars: 2,
+                title: "Level 2: Full Column Grouping",
+                desc: "Group vertical 1s to isolate variable B.",
+                grid: [
+                    [0, 1],
+                    [0, 1]
+                ],
+                targetTerms: ["B"]
+            },
+            {
+                numVars: 3,
+                title: "Level 3: 3-Variable Group of 2",
+                desc: "Find the 2 adjacent 1s in a 3-variable map.",
+                grid: [
+                    [0, 1, 1, 0],
+                    [0, 0, 0, 0]
+                ],
+                targetTerms: ["A'C"]
+            },
+            {
+                numVars: 3,
+                title: "Level 4: Quad Group (2x2)",
+                desc: "Group 4 adjacent 1s into a single 2x2 box to simplify.",
+                grid: [
+                    [1, 1, 0, 0],
+                    [1, 1, 0, 0]
+                ],
+                targetTerms: ["B'"]
+            },
+            {
+                numVars: 3,
+                title: "Level 5: Wrap-Around Edges",
+                desc: "Combine left and right edge columns using wrap-around grouping.",
+                grid: [
+                    [1, 0, 0, 1],
+                    [1, 0, 0, 1]
+                ],
+                targetTerms: ["C'"]
+            },
+            {
+                numVars: 4,
+                title: "Level 6: 4-Variable 4-in-a-Row",
+                desc: "Group an entire row of 4 cells across Gray Code columns.",
+                grid: [
+                    [0, 0, 0, 0],
+                    [1, 1, 1, 1],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0]
+                ],
+                targetTerms: ["A'B"]
+            },
+            {
+                numVars: 4,
+                title: "Level 7: The 4 Corners",
+                desc: "Select the 4 corners of the grid (wrap top-bottom & left-right).",
+                grid: [
+                    [1, 0, 0, 1],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0],
+                    [1, 0, 0, 1]
+                ],
+                targetTerms: ["B'D'"]
+            },
+            {
+                numVars: 4,
+                title: "Level 8: Using Don't Cares ('X')",
+                desc: "Include 'X' cells with 1s to make a larger group of 4.",
+                grid: [
+                    [1, 'X', 0, 0],
+                    [1, 1, 0, 0],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0]
+                ],
+                targetTerms: ["A'C'"]
+            },
+            {
+                numVars: 4,
+                title: "Level 9: Dual Quad Reduction",
+                desc: "Create 2 separate groups of 4 to cover all 1s efficiently.",
+                grid: [
+                    [1, 1, 1, 1],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0],
+                    [1, 1, 1, 1]
+                ],
+                targetTerms: ["B'"]
+            },
+            {
+                numVars: 4,
+                title: "Level 10: Master Challenge",
+                desc: "Cover all 1s with minimal groups using full wrap-around rules.",
+                grid: [
+                    [1, 1, 0, 1],
+                    [1, 1, 0, 1],
+                    [0, 0, 0, 0],
+                    [1, 1, 0, 1]
+                ],
+                targetTerms: ["A'C'", "B'C'", "B'D'"]
+            }
+        ];
+
+        let state = {
+            mode: 'campaign', // 'campaign' or 'sandbox'
+            logicMode: 'sop', // 'sop' (Sum of Products) or 'pos' (Product of Sums)
+            levelIndex: 0,
+            numVars: 2,
+            score: 0,
+            stars: 0,
+            gridData: [],
+            selectedCells: new Set(),
+            groups: [],
+            colors: [
+                'group-color-0', 'group-color-1', 'group-color-2', 'group-color-3',
+                'group-color-4', 'group-color-5', 'group-color-6', 'group-color-7'
+            ],
+            currentCorrectTerm: '',
+            currentChoices: [],
+            lastSelectedKey: ''
+        };
+
+        function getVariableNames(numVars) {
+            if (numVars === 2) return { row: ['A'], col: ['B'], names: ['A', 'B'] };
+            if (numVars === 3) return { row: ['A'], col: ['B', 'C'], names: ['A', 'B', 'C'] };
+            return { row: ['A', 'B'], col: ['C', 'D'], names: ['A', 'B', 'C', 'D'] };
+        }
+
+        function getCellBitValues(r, c, numVars) {
+            if (numVars === 2) {
+                return { A: r, B: c };
+            } else if (numVars === 3) {
+                const bcCodes = [
+                    { B: 0, C: 0 },
+                    { B: 0, C: 1 },
+                    { B: 1, C: 1 },
+                    { B: 1, C: 0 }
+                ];
+                return { A: r, ...bcCodes[c] };
+            } else {
+                const gray2Map = [
+                    [0, 0],
+                    [0, 1],
+                    [1, 1],
+                    [1, 0]
+                ];
+                const [a, b] = gray2Map[r];
+                const [cVal, dVal] = gray2Map[c];
+                return { A: a, B: b, C: cVal, D: dVal };
+            }
+        }
+
+        function getMintermIndex(r, c, numVars) {
+            const bits = getCellBitValues(r, c, numVars);
+            if (numVars === 2) return (bits.A << 1) | bits.B;
+            if (numVars === 3) return (bits.A << 2) | (bits.B << 1) | bits.C;
+            return (bits.A << 3) | (bits.B << 2) | (bits.C << 1) | bits.D;
+        }
+
+        function computeProductTerm(selectedArray, numVars, logicMode = state.logicMode) {
+            if (selectedArray.length === 0) return "";
+            const varNames = getVariableNames(numVars).names;
+            
+            const totalCellsInMap = (numVars === 2) ? 4 : (numVars === 3) ? 8 : 16;
+            if (selectedArray.length === totalCellsInMap) {
+                return logicMode === 'sop' ? "1" : "0";
+            }
+
+            let common = {};
+            varNames.forEach(v => common[v] = null);
+
+            selectedArray.forEach((key, idx) => {
+                const [r, c] = key.split(',').map(Number);
+                const bits = getCellBitValues(r, c, numVars);
+                
+                varNames.forEach(v => {
+                    if (idx === 0) {
+                        common[v] = bits[v];
+                    } else if (common[v] !== null && common[v] !== bits[v]) {
+                        common[v] = null; // Variable changes value, eliminated!
+                    }
+                });
+            });
+
+            if (logicMode === 'sop') {
+                let term = "";
+                varNames.forEach(v => {
+                    if (common[v] === 1) term += v;
+                    else if (common[v] === 0) term += v + "'";
+                });
+                return term || "1";
+            } else {
+                let terms = [];
+                varNames.forEach(v => {
+                    if (common[v] === 0) terms.push(v);
+                    else if (common[v] === 1) terms.push(v + "'");
+                });
+                if (terms.length === 0) return "0";
+                return `(${terms.join(' + ')})`;
+            }
+        }
+
+        function generateTermChoices(correctTerm, numVars, logicMode = state.logicMode) {
+            const varNames = getVariableNames(numVars).names;
+            const choices = new Set([correctTerm]);
+
+            function createDistractor() {
+                if (correctTerm === "1" || correctTerm === "0") {
+                    const v = varNames[Math.floor(Math.random() * varNames.length)];
+                    const single = Math.random() > 0.5 ? v : v + "'";
+                    return logicMode === 'sop' ? single : `(${single})`;
+                }
+
+                if (logicMode === 'sop') {
+                    const literals = correctTerm.match(/[A-D]'/g) || [];
+                    const nonPrimes = correctTerm.replace(/[A-D]'/g, '').split('').filter(c => c >= 'A' && c <= 'D');
+                    const parsed = [...literals, ...nonPrimes];
+
+                    const r = Math.random();
+                    if (r < 0.4 && parsed.length > 0) {
+                        const targetIdx = Math.floor(Math.random() * parsed.length);
+                        const copy = [...parsed];
+                        copy[targetIdx] = copy[targetIdx].includes("'") ? copy[targetIdx][0] : copy[targetIdx] + "'";
+                        copy.sort((a,b) => a[0].localeCompare(b[0]));
+                        return copy.join('');
+                    } else if (r < 0.7) {
+                        const len = Math.max(1, parsed.length);
+                        const shuffled = [...varNames].sort(() => 0.5 - Math.random()).slice(0, len);
+                        shuffled.sort();
+                        return shuffled.map(v => Math.random() > 0.5 ? v : v + "'").join('');
+                    } else {
+                        const unused = varNames.filter(v => !parsed.some(p => p[0] === v));
+                        if (unused.length > 0) {
+                            const extra = unused[Math.floor(Math.random() * unused.length)];
+                            const copy = [...parsed, Math.random() > 0.5 ? extra : extra + "'"];
+                            copy.sort((a,b) => a[0].localeCompare(b[0]));
+                            return copy.join('');
+                        }
+                    }
+                    const fallbackVar = varNames[Math.floor(Math.random() * varNames.length)];
+                    return fallbackVar + (Math.random() > 0.5 ? "'" : "");
+                } else {
+                    const cleaned = correctTerm.replace(/[()]/g, '');
+                    const parts = cleaned.split(' + ').map(s => s.trim());
+
+                    const r = Math.random();
+                    if (r < 0.5 && parts.length > 0) {
+                        const targetIdx = Math.floor(Math.random() * parts.length);
+                        const copy = [...parts];
+                        copy[targetIdx] = copy[targetIdx].includes("'") ? copy[targetIdx][0] : copy[targetIdx] + "'";
+                        copy.sort((a,b) => a[0].localeCompare(b[0]));
+                        return `(${copy.join(' + ')})`;
+                    } else {
+                        const len = Math.max(1, parts.length);
+                        const shuffled = [...varNames].sort(() => 0.5 - Math.random()).slice(0, len);
+                        shuffled.sort();
+                        const formed = shuffled.map(v => Math.random() > 0.5 ? v : v + "'").join(' + ');
+                        return `(${formed})`;
+                    }
+                }
+            }
+
+            let attempts = 0;
+            while (choices.size < 3 && attempts < 50) {
+                attempts++;
+                const d = createDistractor();
+                if (d && d !== correctTerm) {
+                    choices.add(d);
+                }
+            }
+
+            const fallbacks = logicMode === 'sop' 
+                ? ["A", "A'", "B", "B'", "C", "C'", "D", "D'", "AB", "A'B", "BC", "B'C'"]
+                : ["(A)", "(A')", "(B)", "(B')", "(A + B)", "(A' + B)", "(B + C)", "(A' + C')"];
+
+            for (let f of fallbacks) {
+                if (choices.size >= 3) break;
+                if (f !== correctTerm) choices.add(f);
+            }
+
+            const arr = Array.from(choices).slice(0, 3);
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        function isCyclicInterval(setObj, maxDim) {
+            const arr = Array.from(setObj).sort((a,b) => a - b);
+            const k = arr.length;
+            if (k === 0) return false;
+            if (k === maxDim) return true;
+            for (let start = 0; start < maxDim; start++) {
+                let matches = true;
+                for (let i = 0; i < k; i++) {
+                    if (!setObj.has((start + i) % maxDim)) {
+                        matches = false;
+                        break;
+                    }
+                }
+                if (matches) return true;
+            }
+            return false;
+        }
+
+        function validateGroup(selectedArray, numVars) {
+            const count = selectedArray.length;
+            if (count === 0) return { valid: false, reason: "No selection" };
+            if ((count & (count - 1)) !== 0) return { valid: false, reason: "Must be size 1, 2, 4, 8, or 16" };
+
+            const numRows = (numVars === 4) ? 4 : 2;
+            const numCols = (numVars >= 3) ? 4 : 2;
+
+            const rowSet = new Set();
+            const colSet = new Set();
+            const cellSet = new Set(selectedArray);
+
+            selectedArray.forEach(key => {
+                const [r, c] = key.split(',').map(Number);
+                rowSet.add(r);
+                colSet.add(c);
+            });
+
+            if (rowSet.size * colSet.size !== count) {
+                return { valid: false, reason: "Must form a rectangular box" };
+            }
+
+            if (!isCyclicInterval(rowSet, numRows) || !isCyclicInterval(colSet, numCols)) {
+                return { valid: false, reason: "Cells must be adjacent/wrap-around" };
+            }
+
+            for (let r of rowSet) {
+                for (let c of colSet) {
+                    if (!cellSet.has(`${r},${c}`)) {
+                        return { valid: false, reason: "Must form a filled rectangle" };
+                    }
+                }
+            }
+
+            return { valid: true, reason: "" };
+        }
+
+        function renderKMapGrid() {
+            const wrapper = document.getElementById('kmap-wrapper');
+            const numVars = state.numVars;
+            const numRows = (numVars === 4) ? 4 : 2;
+            const numCols = (numVars >= 3) ? 4 : 2;
+
+            const vars = getVariableNames(numVars);
+            const rowLabelHeader = vars.row.join('');
+            const colLabelHeader = vars.col.join('');
+
+            const rowLabels = (numRows === 4) ? ['00', '01', '11', '10'] : ['0', '1'];
+            const colLabels = (numCols === 4) ? ['00', '01', '11', '10'] : ['0', '1'];
+
+            let html = `<div class="inline-block bg-slate-950 p-2 md:p-3 rounded-2xl border border-slate-800 shadow-2xl">`;
+            html += `<table class="border-collapse text-center select-none">`;
+
+            // Header Row
+            html += `<thead><tr>`;
+            html += `<th class="p-1 md:p-2 border-b border-r border-slate-800 bg-slate-900/80 rounded-tl-xl align-middle w-16 h-12">
+                        <div class="relative w-full h-full min-w-[3.5rem] min-h-[2.5rem] flex items-center justify-between px-1.5 bg-[linear-gradient(to_top_right,transparent_46%,#334155_48%,#334155_52%,transparent_54%)]">
+                            <span class="text-[10px] md:text-xs text-indigo-400 font-bold self-end pb-0.5 font-mono" title="Row variable (${rowLabelHeader})">${rowLabelHeader}</span>
+                            <span class="text-[10px] md:text-xs text-sky-400 font-bold self-start pt-0.5 font-mono" title="Column variable (${colLabelHeader})">${colLabelHeader}</span>
+                        </div>
+                     </th>`;
+
+            for (let c = 0; c < numCols; c++) {
+                html += `<th class="px-2 py-1 md:px-3 md:py-1.5 text-xs font-mono font-bold text-sky-300 border-b border-slate-800 bg-slate-900/30">${colLabels[c]}</th>`;
+            }
+            html += `</tr></thead><tbody>`;
+
+            for (let r = 0; r < numRows; r++) {
+                html += `<tr>`;
+                html += `<th class="px-2 py-1 md:px-3 md:py-1.5 text-xs font-mono font-bold text-indigo-300 border-r border-slate-800 bg-slate-900/30">${rowLabels[r]}</th>`;
+
+                for (let c = 0; c < numCols; c++) {
+                    const key = `${r},${c}`;
+                    const val = state.gridData[r][c];
+                    const isSelected = state.selectedCells.has(key);
+
+                    let groupClasses = "";
+                    state.groups.forEach((g, gIdx) => {
+                        if (g.cells.includes(key)) {
+                            groupClasses += ` group-color-${gIdx % state.colors.length}`;
+                        }
+                    });
+
+                    const selectedClass = isSelected ? "selected scale-95 border-2 border-sky-400 shadow-lg shadow-sky-500/30" : "border border-slate-800/80";
+
+                    let valDisplay = val;
+                    let valColor = "text-slate-200";
+                    if (val === 1) valColor = "text-emerald-400 font-bold";
+                    else if (val === 0) valColor = "text-slate-500 font-medium";
+                    else if (val === 'X') valColor = "text-amber-400 font-bold font-mono";
+
+                    html += `<td class="p-1 md:p-1.5">
+                                <button onclick="toggleCell('${key}')" oncontextmenu="cycleCellValue(event, ${r}, ${c})" 
+                                    class="kmap-cell w-10 h-10 md:w-12 md:h-12 rounded-xl flex flex-col items-center justify-center transition-all duration-150 ${selectedClass} ${groupClasses} bg-slate-900 hover:bg-slate-800 hover:border-slate-600 focus:outline-none">
+                                    <span class="text-sm md:text-base ${valColor}">${valDisplay}</span>
+                                    <span class="text-[8px] font-mono text-slate-600 leading-none">m${getMintermIndex(r, c, numVars)}</span>
+                                </button>
+                             </td>`;
+                }
+                html += `</tr>`;
+            }
+
+            html += `</tbody></table></div>`;
+            wrapper.innerHTML = html;
+        }
+
+        function toggleCell(key) {
+            playSound('click');
+            if (state.selectedCells.has(key)) {
+                state.selectedCells.delete(key);
+            } else {
+                state.selectedCells.add(key);
+            }
+            updateSelectionAnalysis();
+            renderKMapGrid();
+        }
+        window.toggleCell = toggleCell;
+
+        function cycleCellValue(e, r, c) {
+            e.preventDefault();
+            if (state.mode !== 'sandbox') return;
+            playSound('click');
+            const current = state.gridData[r][c];
+            if (current === 0) state.gridData[r][c] = 1;
+            else if (current === 1) state.gridData[r][c] = 'X';
+            else state.gridData[r][c] = 0;
+
+            updateSelectionAnalysis();
+            renderKMapGrid();
+            updateFinalExpression();
+        }
+        window.cycleCellValue = cycleCellValue;
+
+        function updateSelectionAnalysis() {
+            const selectedArr = Array.from(state.selectedCells);
+            const count = selectedArr.length;
+
+            document.getElementById('selection-count-badge').textContent = `${count} cell${count !== 1 ? 's' : ''}`;
+
+            const power2El = document.getElementById('status-power-2');
+            const rectEl = document.getElementById('status-rectangular');
+            const termEl = document.getElementById('selection-term-output');
+
+            if (count === 0) {
+                state.lastSelectedKey = '';
+                state.currentCorrectTerm = '';
+                state.currentChoices = [];
+                power2El.innerHTML = `<i class="fa-solid fa-minus text-slate-500"></i> None`;
+                rectEl.innerHTML = `<i class="fa-solid fa-minus text-slate-500"></i> None`;
+                const placeholder = state.logicMode === 'sop' ? 'Select valid 1s on grid first' : 'Select valid 0s on grid first';
+                termEl.innerHTML = `<span class="text-slate-600 text-xs font-normal italic">${placeholder}</span>`;
+                return;
+            }
+
+            const isPowerOfTwo = (count > 0) && ((count & (count - 1)) === 0);
+            if (isPowerOfTwo) {
+                power2El.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400"></i> Power of 2 (${count})`;
+            } else {
+                power2El.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-400"></i> Invalid (${count})`;
+            }
+
+            const valResult = validateGroup(selectedArr, state.numVars);
+
+            if (valResult.valid) {
+                rectEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400"></i> Valid Shape`;
+            } else {
+                rectEl.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-400"></i> ${valResult.reason}`;
+            }
+
+            const targetVal = state.logicMode === 'sop' ? 1 : 0;
+            const invalidVal = state.logicMode === 'sop' ? 0 : 1;
+
+            const hasValidTargets = selectedArr.some(key => {
+                const [r, c] = key.split(',').map(Number);
+                const val = state.gridData[r][c];
+                return val === targetVal || val === 'X';
+            });
+
+            const hasInvalidTargets = selectedArr.some(key => {
+                const [r, c] = key.split(',').map(Number);
+                const val = state.gridData[r][c];
+                return val === invalidVal;
+            });
+
+            const isValidGroup = valResult.valid && hasValidTargets && !hasInvalidTargets;
+
+            if (isValidGroup) {
+                const selKey = selectedArr.sort().join(';') + '_' + state.logicMode;
+                if (selKey !== state.lastSelectedKey) {
+                    state.lastSelectedKey = selKey;
+                    state.currentCorrectTerm = computeProductTerm(selectedArr, state.numVars, state.logicMode);
+                    state.currentChoices = generateTermChoices(state.currentCorrectTerm, state.numVars, state.logicMode);
+                }
+
+                termEl.innerHTML = `
+                    <div class="grid grid-cols-3 gap-1.5 w-full">
+                        ${state.currentChoices.map(choice => {
+                            const escaped = choice.replace(/"/g, '&quot;');
+                            return `
+                                <button data-choice="${escaped}" onclick="selectTermChoice(this.getAttribute('data-choice'))" class="py-1 px-1 bg-indigo-950/80 hover:bg-indigo-600 text-sky-300 hover:text-white border border-indigo-500/40 hover:border-sky-400 rounded-lg text-xs font-mono font-bold transition flex items-center justify-center shadow-sm active:scale-95">
+                                    ${choice}
+                                </button>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            } else {
+                state.lastSelectedKey = '';
+                state.currentCorrectTerm = '';
+                state.currentChoices = [];
+                if (hasInvalidTargets) {
+                    termEl.innerHTML = `<span class="text-red-400 text-xs font-normal">Cannot group ${invalidVal}s in ${state.logicMode.toUpperCase()} mode!</span>`;
+                } else if (!hasValidTargets) {
+                    termEl.innerHTML = `<span class="text-red-400 text-xs font-normal">Must contain at least one ${targetVal}!</span>`;
+                } else {
+                    termEl.innerHTML = `<span class="text-slate-500 text-xs italic">Invalid grouping</span>`;
+                }
+            }
+        }
+
+        function selectTermChoice(term) {
+            const selectedArr = Array.from(state.selectedCells);
+            if (selectedArr.length === 0) return;
+
+            if (term !== state.currentCorrectTerm) {
+                playSound('error');
+                showToast(`Incorrect option! "${term}" is not the correct term for this group.`, 'danger');
+                return;
+            }
+
+            playSound('add');
+            state.groups.push({
+                term: term,
+                cells: [...selectedArr],
+                logicMode: state.logicMode
+            });
+
+            state.selectedCells.clear();
+            state.lastSelectedKey = '';
+            state.currentChoices = [];
+            state.currentCorrectTerm = '';
+
+            updateSelectionAnalysis();
+            renderActiveGroupsList();
+            renderKMapGrid();
+            updateFinalExpression();
+        }
+        window.selectTermChoice = selectTermChoice;
+
+        function renderActiveGroupsList() {
+            const container = document.getElementById('active-groups-container');
+            const countEl = document.getElementById('active-group-count');
+
+            countEl.textContent = state.groups.length;
+
+            if (state.groups.length === 0) {
+                container.innerHTML = `<span class="text-[11px] text-slate-500 italic w-full text-center">No groups added yet.</span>`;
+                return;
+            }
+
+            container.innerHTML = state.groups.map((g, idx) => {
+                const colorClass = state.colors[idx % state.colors.length];
+                return `
+                    <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-xs font-mono font-bold ${colorClass}">
+                        <span>${g.term}</span>
+                        <button onclick="removeGroup(${idx})" class="hover:text-red-300 ml-1 transition" title="Remove group">
+                            <i class="fa-solid fa-xmark text-[10px]"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function removeGroup(index) {
+            playSound('remove');
+            state.groups.splice(index, 1);
+            renderActiveGroupsList();
+            renderKMapGrid();
+            updateFinalExpression();
+        }
+        window.removeGroup = removeGroup;
+
+        function clearAllGroups() {
+            if (state.groups.length === 0) return;
+            playSound('remove');
+            state.groups = [];
+            renderActiveGroupsList();
+            renderKMapGrid();
+            updateFinalExpression();
+        }
+        window.clearAllGroups = clearAllGroups;
+
+        function updateFinalExpression() {
+            const exprEl = document.getElementById('final-expression-output');
+            const coverageEl = document.getElementById('coverage-badge');
+
+            if (state.groups.length === 0) {
+                exprEl.textContent = state.logicMode === 'sop' ? "F = 0" : "F = 1";
+            } else {
+                const terms = state.groups.map(g => g.term);
+                const uniqueTerms = [...new Set(terms)];
+                if (state.logicMode === 'sop') {
+                    exprEl.textContent = "F = " + uniqueTerms.join(" + ");
+                } else {
+                    exprEl.textContent = "F = " + uniqueTerms.join("");
+                }
+            }
+
+            const numRows = (state.numVars === 4) ? 4 : 2;
+            const numCols = (state.numVars >= 3) ? 4 : 2;
+
+            const targetVal = state.logicMode === 'sop' ? 1 : 0;
+            let totalTargets = 0;
+            const coveredTargets = new Set();
+
+            for (let r = 0; r < numRows; r++) {
+                for (let c = 0; c < numCols; c++) {
+                    if (state.gridData[r][c] === targetVal) {
+                        totalTargets++;
+                        const key = `${r},${c}`;
+                        state.groups.forEach(g => {
+                            if (g.cells.includes(key)) {
+                                coveredTargets.add(key);
+                            }
+                        });
+                    }
+                }
+            }
+
+            const pct = totalTargets === 0 ? 100 : Math.round((coveredTargets.size / totalTargets) * 100);
+            coverageEl.textContent = `Coverage: ${pct}%`;
+            if (pct === 100) {
+                coverageEl.className = "text-[8px] font-mono px-1 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/30 font-bold";
+            } else {
+                coverageEl.className = "text-[8px] font-mono px-1 py-0.2 rounded bg-slate-800 text-slate-400";
+            }
+        }
+
+        function submitSolution() {
+            const numRows = (state.numVars === 4) ? 4 : 2;
+            const numCols = (state.numVars >= 3) ? 4 : 2;
+
+            const targetVal = state.logicMode === 'sop' ? 1 : 0;
+            const invalidVal = state.logicMode === 'sop' ? 0 : 1;
+
+            let totalTargets = 0;
+            const coveredTargets = new Set();
+
+            for (let r = 0; r < numRows; r++) {
+                for (let c = 0; c < numCols; c++) {
+                    if (state.gridData[r][c] === targetVal) {
+                        totalTargets++;
+                        const key = `${r},${c}`;
+                        state.groups.forEach(g => {
+                            if (g.cells.includes(key)) {
+                                coveredTargets.add(key);
+                            }
+                        });
+                    }
+                }
+            }
+
+            if (coveredTargets.size < totalTargets) {
+                playSound('error');
+                showToast(`Incomplete! You missed ${totalTargets - coveredTargets.size} ${targetVal}(s).`, 'danger');
+                return;
+            }
+
+            let groupedInvalid = false;
+            state.groups.forEach(g => {
+                g.cells.forEach(key => {
+                    const [r, c] = key.split(',').map(Number);
+                    if (state.gridData[r][c] === invalidVal) {
+                        groupedInvalid = true;
+                    }
+                });
+            });
+
+            if (groupedInvalid) {
+                playSound('error');
+                showToast(`Invalid solution! You grouped a cell containing ${invalidVal}.`, 'danger');
+                return;
+            }
+
+            playSound('win');
+            state.score += 100;
+            state.stars += 3;
+
+            document.getElementById('stat-score').textContent = state.score;
+            document.getElementById('star-count').textContent = state.stars;
+
+            showToast("Level Completed! Outstanding Logic!", 'success');
+
+            if (state.mode === 'campaign') {
+                if (state.levelIndex < CAMPAIGN_LEVELS.length - 1) {
+                    setTimeout(() => {
+                        loadCampaignLevel(state.levelIndex + 1);
+                    }, 1200);
+                } else {
+                    showToast("Congratulations! You mastered all Campaign Levels!", 'success');
+                }
+            }
+        }
+        window.submitSolution = submitSolution;
+
+        function randomizeSandboxGrid() {
+            state.selectedCells.clear();
+            state.groups = [];
+            state.lastSelectedKey = '';
+            state.currentChoices = [];
+            state.currentCorrectTerm = '';
+
+            const numRows = (state.numVars === 4) ? 4 : 2;
+            const numCols = (state.numVars >= 3) ? 4 : 2;
+
+            state.gridData = [];
+            for (let r = 0; r < numRows; r++) {
+                const row = [];
+                for (let c = 0; c < numCols; c++) {
+                    const rand = Math.random();
+                    if (rand < 0.45) row.push(1);
+                    else if (rand < 0.85) row.push(0);
+                    else row.push('X');
+                }
+                state.gridData.push(row);
+            }
+
+            renderKMapGrid();
+            updateSelectionAnalysis();
+            renderActiveGroupsList();
+            updateFinalExpression();
+        }
+        window.randomizeSandboxGrid = randomizeSandboxGrid;
+
+        function loadCampaignLevel(index) {
+            state.mode = 'campaign';
+            state.levelIndex = index;
+            const lvl = CAMPAIGN_LEVELS[index];
+            state.numVars = lvl.numVars;
+            state.gridData = JSON.parse(JSON.stringify(lvl.grid));
+            state.selectedCells.clear();
+            state.groups = [];
+            state.lastSelectedKey = '';
+            state.currentChoices = [];
+            state.currentCorrectTerm = '';
+
+            document.getElementById('stat-level').textContent = `${index + 1}/${CAMPAIGN_LEVELS.length}`;
+            document.getElementById('level-title').textContent = lvl.title;
+            document.getElementById('level-desc').textContent = lvl.desc;
+            document.getElementById('var-count-select').value = lvl.numVars;
+
+            const cornerBtn = document.getElementById('corner-helper');
+            if (state.numVars === 4) {
+                cornerBtn.classList.remove('hidden');
+                cornerBtn.classList.add('flex');
+            } else {
+                cornerBtn.classList.add('hidden');
+                cornerBtn.classList.remove('flex');
+            }
+
+            renderKMapGrid();
+            updateSelectionAnalysis();
+            renderActiveGroupsList();
+            updateFinalExpression();
+        }
+
+        function setLogicMode(mode) {
+            if (state.logicMode === mode) return;
+            playSound('click');
+            state.logicMode = mode;
+
+            const btnSop = document.getElementById('logic-sop');
+            const btnPos = document.getElementById('logic-pos');
+            const termTypeLabel = document.getElementById('term-type-label');
+            const sopPosTitle = document.getElementById('sop-pos-title');
+
+            if (mode === 'sop') {
+                btnSop.className = "px-2 py-0.5 rounded text-xs font-semibold transition bg-sky-600 text-white shadow";
+                btnPos.className = "px-2 py-0.5 rounded text-xs font-semibold text-slate-400 hover:text-white transition";
+                termTypeLabel.textContent = "Select Correct Product Term (Minterm)";
+                sopPosTitle.textContent = "Sum of Products (SOP)";
+            } else {
+                btnPos.className = "px-2 py-0.5 rounded text-xs font-semibold transition bg-indigo-600 text-white shadow";
+                btnSop.className = "px-2 py-0.5 rounded text-xs font-semibold text-slate-400 hover:text-white transition";
+                termTypeLabel.textContent = "Select Correct Sum Term (Maxterm)";
+                sopPosTitle.textContent = "Product of Sums (POS)";
+            }
+
+            state.selectedCells.clear();
+            state.groups = [];
+            state.lastSelectedKey = '';
+            state.currentChoices = [];
+            state.currentCorrectTerm = '';
+
+            updateSelectionAnalysis();
+            renderActiveGroupsList();
+            renderKMapGrid();
+            updateFinalExpression();
+        }
+
+        function select4Corners() {
+            if (state.numVars !== 4) return;
+            playSound('click');
+            state.selectedCells.clear();
+            state.selectedCells.add("0,0");
+            state.selectedCells.add("0,3");
+            state.selectedCells.add("3,0");
+            state.selectedCells.add("3,3");
+            updateSelectionAnalysis();
+            renderKMapGrid();
+        }
+        window.select4Corners = select4Corners;
+
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            let bg = "bg-slate-900 border-slate-700 text-slate-200";
+            let icon = "fa-circle-info text-sky-400";
+
+            if (type === 'success') {
+                bg = "bg-emerald-950/90 border-emerald-500/50 text-emerald-200";
+                icon = "fa-circle-check text-emerald-400";
+            } else if (type === 'danger') {
+                bg = "bg-red-950/90 border-red-500/50 text-red-200";
+                icon = "fa-triangle-exclamation text-red-400";
+            }
+
+            toast.className = `toast-enter flex items-center gap-2 px-3 py-2 rounded-xl border text-xs shadow-2xl backdrop-blur-md pointer-events-auto ${bg}`;
+            toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${msg}</span>`;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 2800);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Logic Mode Switcher
+            document.getElementById('logic-sop').addEventListener('click', () => setLogicMode('sop'));
+            document.getElementById('logic-pos').addEventListener('click', () => setLogicMode('pos'));
+
+            // Audio toggle
+            document.getElementById('btn-sound').addEventListener('click', () => {
+                soundMuted = !soundMuted;
+                const icon = document.getElementById('sound-icon');
+                if (soundMuted) {
+                    icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+                } else {
+                    icon.className = 'fa-solid fa-volume-high text-slate-300';
+                }
+            });
+
+            // Mode switch
+            document.getElementById('mode-campaign').addEventListener('click', (e) => {
+                playSound('click');
+                state.mode = 'campaign';
+                e.target.className = "px-2 py-0.5 rounded text-xs font-semibold transition bg-indigo-600 text-white shadow";
+                document.getElementById('mode-sandbox').className = "px-2 py-0.5 rounded text-xs font-semibold text-slate-400 hover:text-white transition";
+                loadCampaignLevel(0);
+            });
+
+            document.getElementById('mode-sandbox').addEventListener('click', (e) => {
+                playSound('click');
+                state.mode = 'sandbox';
+                e.target.className = "px-2 py-0.5 rounded text-xs font-semibold transition bg-indigo-600 text-white shadow";
+                document.getElementById('mode-campaign').className = "px-2 py-0.5 rounded text-xs font-semibold text-slate-400 hover:text-white transition";
+                document.getElementById('level-title').textContent = "Sandbox Mode";
+                document.getElementById('level-desc').textContent = "Right-click cells to cycle values (0, 1, X). Create and simplify custom maps!";
+                randomizeSandboxGrid();
+            });
+
+            // Variable select
+            document.getElementById('var-count-select').addEventListener('change', (e) => {
+                playSound('click');
+                state.numVars = parseInt(e.target.value);
+                const cornerBtn = document.getElementById('corner-helper');
+                if (state.numVars === 4) {
+                    cornerBtn.classList.remove('hidden');
+                    cornerBtn.classList.add('flex');
+                } else {
+                    cornerBtn.classList.add('hidden');
+                    cornerBtn.classList.remove('flex');
+                }
+                randomizeSandboxGrid();
+            });
+
+            document.getElementById('btn-randomize').addEventListener('click', randomizeSandboxGrid);
+
+            document.getElementById('btn-clear-selection').addEventListener('click', () => {
+                playSound('click');
+                state.selectedCells.clear();
+                state.lastSelectedKey = '';
+                state.currentChoices = [];
+                state.currentCorrectTerm = '';
+                updateSelectionAnalysis();
+                renderKMapGrid();
+            });
+
+            document.getElementById('btn-clear-all-groups').addEventListener('click', clearAllGroups);
+
+            document.getElementById('btn-submit-solution').addEventListener('click', submitSolution);
+
+            document.getElementById('btn-select-corners').addEventListener('click', select4Corners);
+
+            document.getElementById('btn-hint').addEventListener('click', () => {
+                playSound('click');
+                if (state.mode === 'campaign') {
+                    const lvl = CAMPAIGN_LEVELS[state.levelIndex];
+                    showToast(`Target Term Hint: ${lvl.targetTerms.join(' + ')}`, 'info');
+                } else {
+                    showToast("Hint: Try to combine pairs into groups of 4 or 8!", 'info');
+                }
+            });
+
+            // Tutorial modal listeners
+            const modal = document.getElementById('tutorial-modal');
+            document.getElementById('btn-tutorial').addEventListener('click', () => {
+                playSound('click');
+                modal.classList.remove('hidden');
+            });
+            document.getElementById('btn-close-tutorial').addEventListener('click', () => {
+                playSound('click');
+                modal.classList.add('hidden');
+            });
+            document.getElementById('btn-modal-gotit').addEventListener('click', () => {
+                playSound('click');
+                modal.classList.add('hidden');
+            });
+
+            // Initialize level 1 on start
+            loadCampaignLevel(0);
+        });
+    </script>
+</body>
+</html>
